@@ -1,0 +1,13 @@
+{
+  "name": "Unified Job MCP Server",
+  "version": "1.0.0",
+  "description": "Queues shell commands for approval, tracks execution, and proxies MCP calls via mcp-use.",
+  "entrypoint": "backend/index.js",
+  "transport": {
+    "type": "stdio"
+  },
+  "dependencies": {
+    "node": ">=20",
+    "npm": ">=9"
+  }
+}

@@ -126,3 +126,8 @@ dmypy.json
 # AI
 .cursor
 .claude
+
+# Node.js artifacts
+node_modules/
+package-lock.json
+npm-debug.log*
