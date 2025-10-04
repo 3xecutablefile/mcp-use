@@ -43,6 +43,8 @@
 - Visit the [mcp-use docs](https://docs.mcp-use.com/) to get started with mcp-use library
 - For the TypeScript version, visit [mcp-use-ts](https://github.com/mcp-use/mcp-use-ts)
 
+> **Note:** This repository is a community-maintained fork that adds a Node.js backend MCP server on top of the upstream `mcp-use` library. The original `mcp-use` project is authored by its respective maintainers; this fork simply bundles an opinionated server for easier desktop workflows.
+
 | Supports       |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | :------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Primitives** | [![Tools](https://img.shields.io/github/actions/workflow/status/pietrozullo/mcp-use/tests.yml?job=primitive-tools&label=Tools&style=flat)](https://github.com/pietrozullo/mcp-use/actions/workflows/tests.yml) [![Resources](https://img.shields.io/github/actions/workflow/status/pietrozullo/mcp-use/tests.yml?job=primitive-resources&label=Resources&style=flat)](https://github.com/pietrozullo/mcp-use/actions/workflows/tests.yml) [![Prompts](https://img.shields.io/github/actions/workflow/status/pietrozullo/mcp-use/tests.yml?job=primitive-prompts&label=Prompts&style=flat)](https://github.com/pietrozullo/mcp-use/actions/workflows/tests.yml) [![Sampling](https://img.shields.io/github/actions/workflow/status/pietrozullo/mcp-use/tests.yml?job=primitive-sampling&label=Sampling&style=flat)](https://github.com/pietrozullo/mcp-use/actions/workflows/tests.yml) [![Elicitation](https://img.shields.io/github/actions/workflow/status/pietrozullo/mcp-use/tests.yml?job=primitive-elicitation&label=Elicitation&style=flat)](https://github.com/pietrozullo/mcp-use/actions/workflows/tests.yml) [![Authentication](https://img.shields.io/github/actions/workflow/status/pietrozullo/mcp-use/tests.yml?job=primitive-authentication&label=Authentication&style=flat)](https://github.com/pietrozullo/mcp-use/actions/workflows/tests.yml) |
@@ -198,6 +200,114 @@ Example configuration file (`browser_mcp.json`):
   }
 }
 ```
+
+## Node.js backend MCP server add-on
+
+This fork also bundles a Node.js MCP server that exposes:
+
+- `run_command` – queues shell commands for manual approval before execution.
+- `get_job_status` – inspects queued or completed command metadata.
+- `proxy_call` – forwards tool invocations to other MCP servers via [`mcp-use`](https://pypi.org/project/mcp_use/) acting as an MCP client.
+
+The backend runs over stdio so it can be registered with ChatGPT Desktop (or any stdio-speaking MCP client) and uses a persistent SQLite job store.
+
+### Install from Git and set up the backend
+
+```bash
+git clone https://github.com/mcp-use/mcp-use.git
+cd mcp-use
+# Install Python package (optional if you only need the Node backend)
+pip install -e .
+# Install Node dependencies for the backend add-on
+npm install
+```
+
+### Start the MCP server (stdio transport)
+
+```bash
+node backend/index.js
+```
+
+The server prints an interactive approval prompt in the same terminal for every queued command. If you approve (`y`), the command is executed using your current shell (`$SHELL`). Rejecting (`n`) skips execution and marks the job as rejected.
+
+### Registering with ChatGPT Desktop
+
+Add the following entry to your ChatGPT Desktop `manifest.json` (or equivalent MCP server registry):
+
+```json
+{
+  "name": "Local Command Proxy",
+  "command": "node",
+  "args": ["/absolute/path/to/backend/index.js"],
+  "env": {}
+}
+```
+
+After restarting ChatGPT Desktop, it will prompt you to authorize the new server and you can access the `run_command`, `get_job_status`, and `proxy_call` tools from within conversations.
+
+### Connecting to external MCP providers via `proxy_call`
+
+The backend relies on the `backend/client.js` wrapper around `mcp-use` so it can connect to multiple providers. You can define connections either via JSON config files or by supplying the `server` string directly when calling the `proxy_call` MCP tool.
+
+#### Example: Ollama (local stdio)
+
+1. Ensure the [Ollama MCP server](https://github.com/modelcontextprotocol/servers/tree/main/ollama) is installed.
+2. From ChatGPT Desktop (or any MCP client), call `proxy_call` with:
+
+   ```json
+   {
+     "server": "stdio:ollama-mcp",
+     "tool": "ollama.chat",
+     "args": {"model": "llama3", "messages": [{"role": "user", "content": "Hello"}]}
+   }
+   ```
+
+The backend spawns the Ollama MCP server using stdio and returns its response.
+
+#### Example: Google Gemini (HTTP)
+
+1. Start (or obtain) an HTTP-accessible Gemini MCP server.
+2. Call `proxy_call` with:
+
+   ```json
+   {
+     "server": "https://gemini.example.com/mcp",
+     "tool": "gemini.generateText",
+     "args": {"prompt": "Summarize the latest release notes"}
+   }
+   ```
+
+The backend will connect over HTTP using `mcp-use` transports and forward the tool call.
+
+#### Example: ChatGPT Desktop (loopback)
+
+ChatGPT Desktop also exposes its own MCP server. You can target it via its stdio command (found in the desktop app settings) and route tool calls back through the desktop client:
+
+```json
+{
+  "server": "stdio:/Applications/ChatGPT.app/Contents/MacOS/ChatGPT --mcp",
+  "tool": "chat.completions",
+  "args": {"messages": [{"role": "user", "content": "Draft a follow-up email"}]}
+}
+```
+
+#### Example: Claude Desktop
+
+On macOS, Claude Desktop exposes an MCP server command similar to:
+
+```json
+{
+  "server": "stdio:/Applications/Claude.app/Contents/MacOS/Claude --mcp",
+  "tool": "claude.complete",
+  "args": {"messages": [{"role": "user", "content": "Outline a launch plan"}]}
+}
+```
+
+`proxy_call` manages process lifetimes and reuses connections when possible, so you can mix and match providers in a single ChatGPT Desktop session.
+
+### Inspecting job status
+
+Use the `get_job_status` MCP tool with either an `id` or `command` filter to retrieve execution history, timestamps, captured stdout/stderr, and any errors. Jobs are persisted in `jobs.sqlite` (created automatically in the project root).
 
 For other settings, models, and more, check out the documentation.
 
