@@ -1,0 +1,16 @@
+{
+  "name": "mcp-unified",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Unified MCP server combining job execution and MCP proxying",
+  "main": "backend/index.js",
+  "scripts": {
+    "start": "node backend/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.19.1",
+    "sqlite3": "^5.1.6",
+    "mcp-use": "^0.1.18",
+    "zod": "^3.23.8"
+  }
+}
